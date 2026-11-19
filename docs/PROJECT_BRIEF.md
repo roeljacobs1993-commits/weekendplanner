@@ -83,7 +83,7 @@ Niet beschikbaar of afgevallen:
 | Rol | Uitvoering |
 |---|---|
 | Opdrachtgever | Roel |
-| Projectleider | hoofdsessie van Claude Code |
-| Architect | `architect`-agent |
-| Senior programmeur (review) | `code-reviewer`- en `security-auditor`-agent |
-| Junior programmeur (bouw) | `general-purpose`-agent |
+| Projectleider | hoofdsessie van Claude Code (Opus) |
+| Architect | `architect`-agent (Opus) |
+| Senior programmeur (review) | `code-reviewer`- en `security-auditor`-agent (Opus) |
+| Junior programmeur (bouw) | `developer`-agent (Sonnet) |
