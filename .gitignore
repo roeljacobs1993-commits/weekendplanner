@@ -1,0 +1,25 @@
+# Secrets and local configuration
+.env
+
+# Local data
+var/
+stays/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Personal trip plans and local-only adapters (repo is public)
+trips/local/
+plugins/local/
