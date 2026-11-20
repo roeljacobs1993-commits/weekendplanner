@@ -21,7 +21,7 @@
    Deze mappen staan in `.gitignore`. Er wordt alleen een voorbeeld-trip gecommit.
 3. **Lokale werkwijze tot de eerste push:**
    - Elke taak krijgt een eigen branch en wordt lokaal gereviewd door de `code-reviewer`- en `security-auditor`-agent.
-   - Daarna volgen de controle van de projectleider en een squash-merge naar `main` met een Conventional-Commit-bericht.
+   - Daarna volgen de controle van de projectleider en een fast-forward merge naar `main` (`git merge --ff-only`). Een squash-merge zou een commit op `main` zijn, en die weigert de hook `no-commit-to-branch`. Squash-merges (VC-7) komen pas terug via GitHub-PR's na de eerste push.
    - Ter compensatie van de branch protection die er lokaal nog niet is:
      - de pre-commit-hook `no-commit-to-branch` (main) weigert commits direct op `main`;
      - gitleaks draait in pre-commit;
