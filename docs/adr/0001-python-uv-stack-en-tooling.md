@@ -12,10 +12,10 @@ De brief schrijft een Python CLI plus lokale web-UI voor. De standaarden eisen e
 - **Pakketbeheer**: `uv` met `uv.lock` (gecommit). CI installeert met `uv sync --frozen`. Build met `uv build` (hatchling backend).
 - **Opmaak en lint**: `ruff format` en `ruff check` met o.a. de regelsets `E, F, W, I, B, UP, S, C90 (max-complexity = 10), T20 (geen print), ERA (geen uitgecommentarieerde code), BLE (geen blind except), PT, SIM, RUF`.
 - **Types**: `pyright` in `strict`-modus over `src/` en `tests/`.
-- **Tests**: `pytest`, `pytest-cov` (`--cov-fail-under=80`), `diff-cover` (`--fail-under=80` tegen `origin/main`), `respx` voor het mocken van httpx aan de rand, `time-machine` of een geïnjecteerde `Clock` voor tijd. Netwerk is in tests geblokkeerd (`pytest-socket`, `--disable-socket`, met uitzondering voor localhost in de e2e-tests).
+- **Tests**: `pytest`, `pytest-cov` (`--cov-fail-under=80`), `diff-cover` (`--fail-under=80` tegen `origin/main`), `respx` voor het mocken van httpx aan de rand, `time-machine` of een geïnjecteerde `Clock` voor tijd. Netwerk is in tests geblokkeerd met `pytest-socket --allow-hosts=127.0.0.1,::1`: verbindingen naar andere hosts falen. We gebruiken bewust niet `--disable-socket`, omdat asyncio op Windows (ProactorEventLoop) een lokaal socketpaar nodig heeft voor de ASGI-tests. `tests/unit/test_network_guard.py` bewijst dat extern netwerk dicht is.
 - **Libraries**: pydantic v2, pydantic-settings, httpx, structlog, Typer, FastAPI + Jinja2 + uvicorn, SQLAlchemy 2 + Alembic, PyYAML.
 - **Security-scans**: `pip-audit` (op de geëxporteerde lockfile) en gitleaks in CI en pre-commit.
-- **Lokaal**: pre-commit met ruff, pyright (lokale hook via `uv run`), gitleaks en standaard hygiene-hooks.
+- **Lokaal**: pre-commit met ruff, pyright (lokale hook via `uv run --frozen`), gitleaks en standaard hygiene-hooks. De revs zijn vastgepind op een commit-SHA met de versie als commentaar. `uv` moet op het PATH staan.
 
 ## Alternatieven
 | Alternatief | Waarom niet |

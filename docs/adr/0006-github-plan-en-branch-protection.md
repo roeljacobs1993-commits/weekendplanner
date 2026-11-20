@@ -44,3 +44,7 @@
 - **Vervolgacties:**
   - Bij akkoord op de eerste push: `gh repo create --public`, daarna branch protection en de security-instellingen via `gh api`, en een eerste PR waarop de `ci`-check groen moet worden.
   - De GitHub-workflows (ci, codeql, release-please) worden pas dan voor het eerst echt uitgevoerd.
+  - Vóór de eerste push nog regelen:
+    - **Auteur-e-mail:** de commits bevatten nu het auteur-e-mailadres van de lokale git-config. Bij een publieke repo wordt dat zichtbaar. Zet `user.email` op het GitHub-noreply-adres en herschrijf de lokale geschiedenis alleen met akkoord van de opdrachtgever.
+    - **Pins:** controleer of elke action-pin de commit-SHA is. Bij geannoteerde tags is dat de `^{}`-regel van `git ls-remote`.
+    - **Release-please:** release-PR's die met `GITHUB_TOKEN` worden aangemaakt, starten geen workflows, dus de required check `ci` komt daar nooit. Kies een GitHub-App-token, een fine-grained PAT, of start de check handmatig opnieuw.

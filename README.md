@@ -22,7 +22,9 @@ uv run pytest                # draait de tests met coverage
 Alle controles lokaal (zoals in de CI):
 ```bash
 uv run ruff format --check . && uv run ruff check . && uv run pyright && uv run pytest
-uv run pre-commit install    # optioneel: dezelfde controles bij elke commit
+uv run diff-cover coverage.xml --compare-branch=main --fail-under=80
+uv export --frozen --no-dev --no-hashes -o requirements.txt && uv run pip-audit -r requirements.txt --no-deps --disable-pip
+uv run pre-commit install    # dezelfde controles bij elke commit; vereist `uv` op je PATH
 ```
 
 ## Beveiliging
