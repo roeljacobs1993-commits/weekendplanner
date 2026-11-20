@@ -7,7 +7,9 @@ CONTACT = "https://example.org/contact"
 
 
 def make(**overrides: str) -> Settings:
-    # _env_file=None keeps tests independent of a developer's local .env.
+    # _env_file=None keeps tests independent of a developer's local .env. The ignore is needed
+    # because pydantic-settings' `_env_file` init kwarg and the env-style field aliases are not
+    # part of the generated __init__ signature that pyright sees.
     return Settings(_env_file=None, **overrides)  # pyright: ignore[reportCallIssue]
 
 
@@ -55,6 +57,18 @@ def test_key_with_space_is_rejected(key_name: str) -> None:
         make(CONTACT_URL=CONTACT, **{key_name: "abcd efgh12345678"})
 
 
+def test_rejected_key_value_is_not_echoed_in_the_error() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        make(CONTACT_URL=CONTACT, SERPAPI_KEY="leaky secret 1234567890")
+
+    assert "leaky secret" not in str(exc_info.value)
+
+
+def test_explicitly_passed_empty_key_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="must not be empty"):
+        make(CONTACT_URL=CONTACT, SERPAPI_KEY="")
+
+
 def test_too_short_key_is_rejected() -> None:
     with pytest.raises(ValidationError, match="at least"):
         make(CONTACT_URL=CONTACT, NS_API_KEY="short")
@@ -69,7 +83,16 @@ def test_empty_key_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.ors_api_key is None
 
 
-@pytest.mark.parametrize("value", ["mailto:me@example.org", "me@example.org", "http://example.org"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "mailto:me@example.org",
+        "me@example.org",
+        "http://example.org",
+        "https://me@example.org",
+        "https://example.org/?contact=me@example.org",
+    ],
+)
 def test_non_https_or_email_contact_is_rejected(value: str) -> None:
     with pytest.raises(ValidationError, match="https"):
         make(CONTACT_URL=value)
@@ -84,10 +107,12 @@ def test_environ_is_only_read_in_config_module() -> None:
     from pathlib import Path
 
     src = Path(__file__).parents[2] / "src" / "app"
+    config_module = src / "config.py"
     offenders = [
-        p.name
+        str(p.relative_to(src))
         for p in src.rglob("*.py")
-        if p.name != "config.py" and ("os.environ" in p.read_text() or "getenv" in p.read_text())
+        if p != config_module
+        and any(token in p.read_text(encoding="utf-8") for token in ("environ", "getenv", "putenv"))
     ]
 
     assert offenders == []

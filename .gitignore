@@ -1,5 +1,7 @@
 # Secrets and local configuration
 .env
+.env.*
+!.env.example
 
 # Local data
 var/
@@ -23,3 +25,4 @@ build/
 # Personal trip plans and local-only adapters (repo is public)
 trips/local/
 plugins/local/
+requirements.txt

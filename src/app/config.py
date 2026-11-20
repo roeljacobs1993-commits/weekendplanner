@@ -25,7 +25,8 @@ def _validate_key(value: SecretStr) -> SecretStr:
 
 def _validate_contact_url(value: str) -> str:
     parsed = urlparse(value)
-    if parsed.scheme != "https" or not parsed.netloc or "@" in parsed.netloc:
+    # The contact ends up in public User-Agent headers, so no e-mail address anywhere in it.
+    if parsed.scheme != "https" or not parsed.netloc or "@" in value:
         msg = "must be an https:// URL (no e-mail address or mailto:)"
         raise ValueError(msg)
     return value
@@ -40,6 +41,8 @@ class Settings(BaseSettings):
         extra="ignore",
         # `KEY=` lines copied from .env.example count as unset.
         env_ignore_empty=True,
+        # A rejected API key must never be echoed back in a validation error.
+        hide_input_in_errors=True,
     )
 
     serpapi_key: ApiKey | None = None
