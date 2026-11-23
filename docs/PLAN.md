@@ -60,6 +60,7 @@ Volgt het goedgekeurde plan (T-001…T-016). Te grote taken zijn gesplitst met e
   - [ ] Cache: binnen TTL geen netwerkverzoek en geen quotaverbruik (test met respx: 0 calls).
   - [ ] Quotum: atomaire ophoging; bij 80% één `quota_warning`-log; bij 100% `QuotaExceededError` zonder netwerkverzoek (tests); `SERPAPI_MONTHLY_LIMIT` in `Settings`.
   - [ ] Elke response (ook 4xx/5xx) wordt als snapshot opgeslagen; request-params en URL's zijn geredigeerd (`api_key`, `token`): test dat een secret nergens in de snapshot of in de logs voorkomt. `httpx`/`httpcore`-loggers op WARNING.
+  - [ ] De CLI roept bij het opstarten `configure_logging` aan met `known_secrets` uit alle gezette API-keys in `Settings` (ook hun URL-gecodeerde vorm). Een test bewijst dat een geconfigureerde key niet in de logs verschijnt.
   - [ ] Offline-modus: alleen snapshots; ontbrekende snapshot geeft `OfflineMissError`, geen netwerk (test).
   - [ ] `weekend quota` toont verbruik per bron en periode; `weekend snapshots prune` met `SNAPSHOT_RETENTION_MONTHS` (default 12), vraagt bevestiging, `--yes` om te skippen (tests met fake clock).
 - **Afhankelijk van**: T-002
