@@ -6,6 +6,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.domain.scores import ScoringParams
+
 
 class _Model(BaseModel):
     # Frozen: a validated config is never mutated; overrides produce a new, re-validated one.
@@ -83,6 +85,7 @@ class TripConfig(_Model):
     budget_per_person_eur: Decimal | None = Field(default=None, gt=0)
     weights: Weights = Weights()
     stay: StayRequirements = StayRequirements()
+    scoring: ScoringParams = ScoringParams()
 
     @property
     def nights(self) -> int:
