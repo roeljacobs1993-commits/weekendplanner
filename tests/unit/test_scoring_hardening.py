@@ -296,6 +296,7 @@ def test_rating_thresholds_are_tunable() -> None:
         "https://x.nl) [Boek hier](javascript:alert(1)",
         'https://x.nl/"><script>',
         "https://user:pw@x.nl/",
+        "https://x.nl/a)[Boek](javascript:alert(1))",
     ],
 )
 def test_malformed_or_injecting_links_are_rejected(url: str) -> None:
@@ -324,3 +325,15 @@ def test_clamp_refuses_nan_instead_of_returning_the_best_score() -> None:
 
     with pytest.raises(ValueError, match="NaN"):
         clamp(float("nan"))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.booking.com/hotel/pt/casa.nl.html?checkin=2027-03-19&group_adults=10",
+        "https://en.wikipedia.org/wiki/Porto_(city)",
+        "https://xn--bcher-kva.de/a%20b",
+    ],
+)
+def test_ordinary_booking_and_reference_links_are_accepted(url: str) -> None:
+    assert stay(url=url).url == url

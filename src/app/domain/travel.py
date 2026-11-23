@@ -25,8 +25,8 @@ ActivityCount = Annotated[int, Field(ge=0, le=1_000_000)]
 # A plain host name with an optional port: no credentials, spaces or markup.
 _HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(?::[0-9]{1,5})?$")
 # Characters that could break out of an HTML attribute or Markdown link if a renderer
-# ever forgets to escape; real URLs percent-encode them.
-_UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f<>\"'`\\]")
+# ever forgets to escape; real URLs percent-encode them ([ and ] outside IPv6 hosts too).
+_UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f<>\"'`\\\[\]]")
 
 
 def _web_url(value: str) -> str:
