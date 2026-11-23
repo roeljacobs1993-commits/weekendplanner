@@ -29,7 +29,17 @@ def test_secret_like_keys_are_redacted() -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["Authorization", "Proxy-Authorization", "Cookie", "credentials", "serpApiKey", "privateKey"],
+    [
+        "Authorization",
+        "Proxy-Authorization",
+        "Cookie",
+        "credentials",
+        "serpApiKey",
+        "privateKey",
+        "serpapi_key",
+        "SERPAPI_KEY",
+        "ors_api_key",
+    ],
 )
 def test_auth_headers_and_camel_case_key_names_are_redacted(name: str) -> None:
     result = redact_secrets(None, "info", {"event": "call", name: "s3cr3t-value"})
@@ -60,6 +70,32 @@ def test_secrets_inside_lists_of_pairs_are_redacted() -> None:
     assert result["params"] == [("api_key", REDACTED), ("q", "AMS")]
 
 
+def test_a_pair_of_urls_is_scrubbed_on_both_sides() -> None:
+    out_url = "https://serpapi.com/search?q=AMS&api_key=abc123"
+    in_url = "https://serpapi.com/search?q=OPO&api_key=abc123"
+
+    result = redact_secrets(None, "info", {"event": "searched", "urls": (out_url, in_url)})
+
+    assert result["urls"] == (
+        f"https://serpapi.com/search?q=AMS&api_key={REDACTED}",
+        f"https://serpapi.com/search?q=OPO&api_key={REDACTED}",
+    )
+
+
+def test_text_in_the_name_slot_of_a_pair_is_scrubbed() -> None:
+    result = redact_secrets(None, "info", {"event": "call", "auth": ("Bearer abc", 1)})
+
+    assert result["auth"] == REDACTED
+
+
+def test_secrets_in_mapping_keys_are_scrubbed() -> None:
+    url = "https://serpapi.com/search?api_key=abc123"
+
+    result = redact_secrets(None, "info", {"event": "statuses", "by_url": {url: 200}})
+
+    assert result["by_url"] == {f"https://serpapi.com/search?api_key={REDACTED}": 200}
+
+
 def test_secret_values_in_urls_are_redacted() -> None:
     event = {"event": "call", "url": "https://serpapi.com/search?q=AMS&api_key=abc123&hl=nl"}
 
@@ -72,6 +108,58 @@ def test_query_parameters_merely_ending_in_key_are_kept() -> None:
     result = redact_secrets(None, "info", {"event": "call", "url": "https://x.org/?monkey=banana"})
 
     assert result["url"] == "https://x.org/?monkey=banana"
+
+
+def test_vendor_key_parameters_in_text_are_redacted() -> None:
+    result = redact_secrets(None, "info", {"event": "call", "note": "used serpapi_key=abc123"})
+
+    assert result["note"] == f"used serpapi_key={REDACTED}"
+
+
+def test_ordinary_key_parameters_in_text_are_kept() -> None:
+    result = redact_secrets(None, "info", {"event": "call", "note": "cache_key=abc request_key=d"})
+
+    assert result["note"] == "cache_key=abc request_key=d"
+
+
+def test_authorization_header_text_is_redacted() -> None:
+    result = redact_secrets(
+        None, "info", {"event": "call", "note": "Authorization: Basic Ym9iOnB3"}
+    )
+
+    assert result["note"] == f"Authorization: {REDACTED}"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Client(api_key='abc123', q='AMS')", f"Client(api_key='{REDACTED}', q='AMS')"),
+        ('token="abc123"', f'token="{REDACTED}"'),
+        ("X-Api-Key: abc123", f"X-Api-Key: {REDACTED}"),
+        ('{"client_secret": "abc123"}', f'{{"client_secret": "{REDACTED}"}}'),
+        ('{"refresh_token": "abc123"}', f'{{"refresh_token": "{REDACTED}"}}'),
+        ("passwd=abc123&x=1", f"passwd={REDACTED}&x=1"),
+    ],
+)
+def test_secret_assignments_in_text_are_redacted(text: str, expected: str) -> None:
+    result = redact_secrets(None, "info", {"event": "call", "note": text})
+
+    assert result["note"] == expected
+
+
+def test_self_referencing_structures_do_not_break_logging() -> None:
+    loop: list[object] = ["x"]
+    loop.append(loop)
+
+    result = redact_secrets(None, "info", {"event": "call", "data": loop})
+
+    assert result["data"][0] == "x"
+
+
+def test_tuple_keys_become_text_so_json_rendering_works() -> None:
+    result = redact_secrets(None, "info", {"event": "call", "by_pair": {("AMS", "OPO"): 1}})
+
+    assert result["by_pair"] == {"('AMS', 'OPO')": 1}
 
 
 def test_bearer_tokens_in_text_are_redacted() -> None:

@@ -34,27 +34,55 @@ _SECRET_SEGMENTS = frozenset(
         "token",
     }
 )
-# "key" alone is too broad (request_key, cache_key are useful in logs); only these qualify it.
-_KEY_QUALIFIERS = frozenset(
-    {"api", "access", "auth", "client", "private", "secret", "subscription"}
+# A "key" segment is a secret (serpapi_key, x_api_key, key) unless it follows one of these
+# names of ordinary identifiers, which are useful in logs.
+_BENIGN_KEY_PREFIXES = frozenset(
+    {
+        "cache",
+        "composite",
+        "foreign",
+        "group",
+        "hash",
+        "idempotency",
+        "index",
+        "lookup",
+        "map",
+        "natural",
+        "partition",
+        "primary",
+        "public",
+        "request",
+        "routing",
+        "row",
+        "shard",
+        "sort",
+        "unique",
+    }
 )
 
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _NAME_SPLIT = re.compile(r"[_\-\s]+")
+# Deeper nesting than this is not expected in a log call; it also stops reference cycles.
+_MAX_DEPTH = 12
 
-_SECRET_PARAM = r"(?:api_?key|key|token|access_token|secret|password|sig|signature|auth)"  # noqa: S105 -- names of secret parameters, not a secret
-_TEXT_SCRUBBERS: tuple[tuple[re.Pattern[str], str], ...] = (
-    # Authorization: Bearer <token>
-    (re.compile(r"(?i)\b(bearer)\s+[^\s\"',;]+"), rf"\1 {REDACTED}"),
+# Fixed patterns, applied before the name-based assignment scrubber.
+_FIXED_SCRUBBERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Authorization/Cookie headers as text: the whole value up to the end of the line.
+    (
+        re.compile(r"(?im)\b((?:proxy-)?authorization|set-cookie|cookie)(\s*[:=]\s*)[^\r\n]+"),
+        rf"\1\2{REDACTED}",
+    ),
+    # Credentials after an auth scheme, e.g. "Bearer abc.def".
+    (re.compile(r"(?i)\b(bearer|basic|digest)\s+[A-Za-z0-9+/=._~-]{6,}"), rf"\1 {REDACTED}"),
     # https://user:password@host
     (re.compile(r"(?<=//)[^/@\s]+@"), f"{REDACTED}@"),
-    # "api_key": "value" in JSON or Python repr text
-    (
-        re.compile(rf"(?i)([\"']{_SECRET_PARAM}[\"']\s*:\s*[\"'])[^\"']*([\"'])"),
-        rf"\1{REDACTED}\2",
-    ),
-    # ?api_key=value in URLs and form bodies; the lookbehind keeps e.g. monkey=banana intact.
-    (re.compile(rf"(?i)(?<![A-Za-z0-9])({_SECRET_PARAM})=([^&\s#\"']+)"), rf"\1={REDACTED}"),
+)
+# name=value, name: value, "name": "value", name='value': the value is replaced when the
+# name is a secret name by the same rules as field names. "(?!//)" skips URL schemes such
+# as "https://", so the query string inside the URL is still scanned.
+_ASSIGNMENT = re.compile(
+    r"(?<![\w-])(?P<q>[\"']?)(?P<name>[A-Za-z][\w-]*)(?P=q)(?P<sep>\s*[:=]\s*)(?!//)"
+    r"(?P<vq>[\"']?)(?P<value>[^&\s#\"',;})\]]+)(?P=vq)"
 )
 
 
@@ -63,8 +91,16 @@ def is_secret_name(name: str) -> bool:
     if any(segment in _SECRET_SEGMENTS for segment in segments):
         return True
     return any(
-        segment == "key" and (index == 0 or segments[index - 1] in _KEY_QUALIFIERS)
+        segment == "key" and (index == 0 or segments[index - 1] not in _BENIGN_KEY_PREFIXES)
         for index, segment in enumerate(segments)
+    )
+
+
+def _scrub_assignment(match: re.Match[str]) -> str:
+    if not is_secret_name(match["name"]) or match["value"] == REDACTED:
+        return match[0]
+    return (
+        f"{match['q']}{match['name']}{match['q']}{match['sep']}{match['vq']}{REDACTED}{match['vq']}"
     )
 
 
@@ -80,41 +116,53 @@ class SecretRedactor:
 
     def __call__(self, _logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
         return {
-            key: self._value(value, secret=key != "event" and is_secret_name(str(key)))
+            key: self._value(value, 0, secret=key != "event" and is_secret_name(str(key)))
             for key, value in event_dict.items()
         }
 
-    def _value(self, value: object, *, secret: bool = False) -> object:
+    def _value(self, value: object, depth: int, *, secret: bool = False) -> object:
         if secret:
             return REDACTED
         if value is None or isinstance(value, bool | int | float):
             return value
         if isinstance(value, str):
             return self._text(value)
+        if depth >= _MAX_DEPTH:
+            return "<nested too deep>"
         if isinstance(value, Mapping):
             # Log payloads are arbitrary; isinstance cannot recover the item types.
             mapping = cast("Mapping[object, object]", value)
-            return {k: self._value(v, secret=is_secret_name(str(k))) for k, v in mapping.items()}
+            return {
+                self._key(k): self._value(v, depth + 1, secret=is_secret_name(str(k)))
+                for k, v in mapping.items()
+            }
         if isinstance(value, list | tuple | set | frozenset):
-            return self._sequence(cast("Collection[object]", value))
+            return self._sequence(cast("Collection[object]", value), depth + 1)
         # Exceptions, URLs, models: render as text so the scrubbers can see what would be logged.
         return self._text(str(value))
 
-    def _sequence(self, items: Collection[object]) -> object:
+    def _key(self, key: object) -> object:
+        # Numbers stay numbers; anything else becomes (scrubbed) text so JSON rendering works.
+        if key is None or isinstance(key, bool | int | float):
+            return key
+        return self._text(str(key))
+
+    def _sequence(self, items: Collection[object], depth: int) -> object:
         # A (name, value) pair as used for query params, e.g. [("api_key", "abc"), ...].
         if isinstance(items, tuple) and len(items) == 2:
             name = items[0]
             if isinstance(name, str):
-                return (name, self._value(items[1], secret=is_secret_name(name)))
-        cleaned = [self._value(item) for item in items]
+                value = self._value(items[1], depth, secret=is_secret_name(name))
+                return (self._text(name), value)
+        cleaned = [self._value(item, depth) for item in items]
         return tuple(cleaned) if isinstance(items, tuple) else cleaned
 
     def _text(self, text: str) -> str:
         for secret in self._known:
             text = text.replace(secret, REDACTED)
-        for pattern, replacement in _TEXT_SCRUBBERS:
+        for pattern, replacement in _FIXED_SCRUBBERS:
             text = pattern.sub(replacement, text)
-        return text
+        return _ASSIGNMENT.sub(_scrub_assignment, text)
 
 
 redact_secrets = SecretRedactor()
