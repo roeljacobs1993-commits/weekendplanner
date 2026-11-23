@@ -1,0 +1,29 @@
+# Voorbeeldtrip (ijkpunt uit docs/PROJECT_BRIEF.md). Eigen trips horen in trips/local/.
+# Tijden altijd tussen aanhalingstekens: YAML leest 12:00 anders als getal.
+name: maart-2027
+home:
+  name: Nijmegen
+  lat: 51.8425
+  lon: 5.8528
+group_size: 10
+rooms_min: 5
+persons_per_room: 2
+outbound:
+  date: 2027-03-19
+  earliest: "12:00"
+  latest: "18:00"
+inbound:
+  date: 2027-03-22
+  earliest: "15:00"
+nonstop_only: true
+max_drive_minutes: 150
+max_ov_minutes: 180
+top_n: 5
+top_k_live: 12
+weights:
+  price: 0.35
+  quality: 0.30
+  activities: 0.20
+  originality: 0.15
+stay:
+  living_room_required: true

@@ -1,0 +1,3 @@
+# Dummy key in a unit test (proves that SecretStr hides it), not a real secret.
+# Format: <commit>:<file>:<rule>:<line>. Add an entry only for a reviewed false positive.
+17acbae1fd3d1de120904581a76d68caa6d84f42:tests/unit/test_config.py:generic-api-key:38
