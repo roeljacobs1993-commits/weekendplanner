@@ -4,7 +4,7 @@ from datetime import date, time
 from decimal import Decimal
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Model(BaseModel):
@@ -25,6 +25,16 @@ class TimeWindow(_Model):
     date: date
     earliest: time | None = None
     latest: time | None = None
+
+    @field_validator("earliest", "latest", mode="before")
+    @classmethod
+    def _reject_numeric_times(cls, value: object) -> object:
+        # YAML 1.1 reads an unquoted 12:00 as the number 720, which pydantic would accept
+        # as 720 seconds (00:12). Refuse numbers so that mistake can never pass silently.
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            msg = "write times as quoted 'HH:MM'"
+            raise ValueError(msg)
+        return value
 
     @model_validator(mode="after")
     def _earliest_before_latest(self) -> Self:
@@ -78,6 +88,18 @@ class TripConfig(_Model):
     def nights(self) -> int:
         return (self.inbound.date - self.outbound.date).days
 
+    @property
+    def required_bedrooms(self) -> int:
+        """Bedrooms a stay must have: the explicit stay setting, else rooms_min."""
+        explicit = self.stay.bedrooms_min
+        return explicit if explicit is not None else self.rooms_min
+
+    @property
+    def required_guests(self) -> int:
+        """Guests a stay must sleep: the explicit stay setting, else the group size."""
+        explicit = self.stay.guests_min
+        return explicit if explicit is not None else self.group_size
+
     @model_validator(mode="after")
     def _consistent(self) -> Self:
         if self.inbound.date <= self.outbound.date:
@@ -89,23 +111,10 @@ class TripConfig(_Model):
         if self.top_k_live < self.top_n:
             msg = "top_k_live must be at least top_n"
             raise ValueError(msg)
-        return self._with_derived_stay()
-
-    def _with_derived_stay(self) -> Self:
-        bedrooms = self.stay.bedrooms_min
-        guests = self.stay.guests_min
-        if bedrooms is not None and bedrooms < self.rooms_min:
+        if self.required_bedrooms < self.rooms_min:
             msg = "stay.bedrooms_min must be at least rooms_min"
             raise ValueError(msg)
-        if guests is not None and guests < self.group_size:
+        if self.required_guests < self.group_size:
             msg = "stay.guests_min must be at least group_size"
             raise ValueError(msg)
-        stay = self.stay.model_copy(
-            update={
-                "bedrooms_min": bedrooms if bedrooms is not None else self.rooms_min,
-                "guests_min": guests if guests is not None else self.group_size,
-            }
-        )
-        # The model is frozen; the derived stay is set once, during validation.
-        object.__setattr__(self, "stay", stay)
         return self

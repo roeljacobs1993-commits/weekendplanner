@@ -43,9 +43,25 @@ def test_nights_are_derived_from_the_dates() -> None:
 def test_stay_requirements_default_to_rooms_and_group_size() -> None:
     trip = TripConfig.model_validate(trip_data())
 
-    assert trip.stay.bedrooms_min == 5
-    assert trip.stay.guests_min == 10
+    assert trip.required_bedrooms == 5
+    assert trip.required_guests == 10
+    assert trip.stay.bedrooms_min is None
     assert trip.stay.living_room_required is True
+
+
+def test_explicit_stay_requirements_take_precedence() -> None:
+    trip = TripConfig.model_validate(trip_data(stay={"bedrooms_min": 6, "guests_min": 12}))
+
+    assert trip.required_bedrooms == 6
+    assert trip.required_guests == 12
+
+
+def test_changing_rooms_after_a_round_trip_still_validates() -> None:
+    dumped = TripConfig.model_validate(trip_data()).model_dump()
+
+    trip = TripConfig.model_validate(dumped | {"rooms_min": 6})
+
+    assert trip.required_bedrooms == 6
 
 
 def test_inbound_must_be_after_outbound() -> None:
@@ -58,6 +74,11 @@ def test_inbound_must_be_after_outbound() -> None:
 def test_time_window_earliest_must_be_before_latest() -> None:
     with pytest.raises(ValidationError, match="earliest must be before latest"):
         TimeWindow(date=date(2027, 3, 19), earliest=time(18, 0), latest=time(12, 0))
+
+
+def test_time_window_with_equal_bounds_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="earliest must be before latest"):
+        TimeWindow(date=date(2027, 3, 19), earliest=time(12, 0), latest=time(12, 0))
 
 
 def test_open_ended_time_window_is_allowed() -> None:
@@ -91,9 +112,16 @@ def test_top_k_live_must_cover_top_n() -> None:
         TripConfig.model_validate(data)
 
 
-def test_negative_weight_is_rejected() -> None:
+def test_top_k_live_equal_to_top_n_is_allowed() -> None:
+    trip = TripConfig.model_validate(trip_data(top_n=10, top_k_live=10))
+
+    assert trip.top_k_live == 10
+
+
+@pytest.mark.parametrize("field", ["price", "quality", "activities", "originality"])
+def test_negative_weight_is_rejected(field: str) -> None:
     with pytest.raises(ValidationError, match="greater than or equal to 0"):
-        Weights(price=-1)
+        Weights.model_validate({field: -1})
 
 
 def test_weights_must_not_all_be_zero() -> None:

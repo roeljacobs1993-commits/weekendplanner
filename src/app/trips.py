@@ -35,8 +35,21 @@ def apply_overrides(data: dict[str, object], overrides: list[str]) -> dict[str, 
         if not sep or not key:
             msg = f"override {override!r} must look like key=value"
             raise TripFileError(msg)
-        _set_path(result, key.split("."), yaml.safe_load(raw_value))
+        _set_path(result, key.split("."), _parse_override_value(key, raw_value))
     return result
+
+
+def _parse_override_value(key: str, raw_value: str) -> object:
+    if not raw_value.strip():
+        # An empty value would silently become None; clearing must be explicit.
+        msg = f"override for {key} is empty (use null to clear a value)"
+        raise TripFileError(msg)
+    try:
+        return yaml.safe_load(raw_value)
+    except yaml.YAMLError as exc:
+        # Only the key is echoed: the value could be something the user would rather not print.
+        msg = f"override for {key} has an invalid value (not valid YAML)"
+        raise TripFileError(msg) from exc
 
 
 def _set_path(data: dict[str, object], parts: list[str], value: object) -> None:
@@ -59,15 +72,29 @@ def _read_mapping(path: Path) -> dict[str, object]:
     except FileNotFoundError as exc:
         msg = f"trip file {path} not found"
         raise TripFileError(msg) from exc
+    except UnicodeDecodeError as exc:
+        msg = f"trip file {path} is not UTF-8 text"
+        raise TripFileError(msg) from exc
+    except OSError as exc:
+        msg = f"trip file {path} cannot be read ({exc.strerror or type(exc).__name__})"
+        raise TripFileError(msg) from exc
     try:
         loaded: object = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        msg = f"trip file {path} is not valid YAML: {exc}"
+        msg = f"trip file {path} is not valid YAML{_yaml_position(exc)}"
         raise TripFileError(msg) from exc
     if not isinstance(loaded, dict):
         msg = f"trip file {path} must contain a mapping of settings"
         raise TripFileError(msg)
     return dict(loaded)  # pyright: ignore[reportUnknownArgumentType] -- YAML mapping, validated later
+
+
+def _yaml_position(exc: yaml.YAMLError) -> str:
+    # Report where, not the offending line itself, so file content is not echoed.
+    mark = getattr(exc, "problem_mark", None)
+    if isinstance(mark, yaml.Mark):
+        return f" (line {mark.line + 1}, column {mark.column + 1})"
+    return ""
 
 
 def _format_error(error: ErrorDetails) -> str:

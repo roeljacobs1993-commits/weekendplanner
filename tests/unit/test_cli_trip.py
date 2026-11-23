@@ -14,6 +14,8 @@ def test_trip_check_shows_the_validated_trip_and_derived_nights() -> None:
     assert result.exit_code == 0
     assert "maart-2027" in result.stdout
     assert "nights: 3" in result.stdout
+    assert "required_bedrooms: 5" in result.stdout
+    assert "required_guests: 10" in result.stdout
     assert "group_size: 10" in result.stdout
 
 
@@ -22,6 +24,13 @@ def test_trip_check_applies_set_overrides() -> None:
 
     assert result.exit_code == 0
     assert "top_n: 10" in result.stdout
+
+
+def test_trip_check_help_explains_that_values_are_read_as_yaml() -> None:
+    result = runner.invoke(cli_app, ["trip", "check", "--help"])
+
+    assert result.exit_code == 0
+    assert "read as YAML" in " ".join(result.stdout.split())
 
 
 def test_trip_check_reports_field_errors_with_exit_code_2() -> None:
@@ -35,5 +44,20 @@ def test_trip_check_error_output_has_no_traceback(tmp_path: Path) -> None:
     result = runner.invoke(cli_app, ["trip", "check", str(tmp_path / "missing.yaml")])
 
     assert result.exit_code == 2
-    assert "Traceback" not in result.output
+    assert isinstance(result.exception, SystemExit)
     assert "not found" in result.stderr
+
+
+def test_trip_check_reports_an_invalid_override_value_with_exit_code_2() -> None:
+    result = runner.invoke(cli_app, ["trip", "check", str(EXAMPLE), "--set", "name=[x"])
+
+    assert result.exit_code == 2
+    assert isinstance(result.exception, SystemExit)
+    assert "override for name has an invalid value" in result.stderr
+
+
+def test_trip_check_reports_a_malformed_override_with_exit_code_2() -> None:
+    result = runner.invoke(cli_app, ["trip", "check", str(EXAMPLE), "--set", "top_n"])
+
+    assert result.exit_code == 2
+    assert "must look like key=value" in result.stderr

@@ -38,7 +38,13 @@ def trip_check(
     path: Annotated[Path, typer.Argument(help="Trip file (YAML).")],
     overrides: Annotated[
         list[str] | None,
-        typer.Option("--set", help="Override a value, e.g. --set top_n=10 or weights.price=0.5."),
+        typer.Option(
+            "--set",
+            help=(
+                "Override a value, e.g. --set top_n=10 or weights.price=0.5. Values are read as"
+                " YAML: quote text such as 'no' and times such as '\"12:00\"'; use null to clear."
+            ),
+        ),
     ] = None,
 ) -> None:
     """Validate a trip file and show the resulting configuration."""
@@ -50,7 +56,11 @@ def trip_check(
             if error != str(exc):
                 typer.echo(f"  - {error}", err=True)
         raise typer.Exit(EXIT_INVALID_INPUT) from exc
-    shown = trip.model_dump(mode="json") | {"nights": trip.nights}
+    shown = trip.model_dump(mode="json") | {
+        "nights": trip.nights,
+        "required_bedrooms": trip.required_bedrooms,
+        "required_guests": trip.required_guests,
+    }
     typer.echo(yaml.safe_dump(shown, sort_keys=False, allow_unicode=True).rstrip())
 
 
