@@ -134,11 +134,25 @@ def test_unknown_scoring_parameter_is_rejected() -> None:
 
 
 SCORING_PACKAGE = Path(__file__).parents[2] / "src" / "app" / "scoring"
-FORBIDDEN_MODULES = {"httpx", "requests", "socket", "urllib", "sqlalchemy", "pathlib", "os", "io"}
+FORBIDDEN_MODULES = {
+    "httpx",
+    "requests",
+    "socket",
+    "urllib",
+    "sqlalchemy",
+    "sqlite3",
+    "pathlib",
+    "os",
+    "io",
+    "shutil",
+    "subprocess",
+    "tempfile",
+    "glob",
+}
 
 
 def _scoring_trees() -> list[ast.AST]:
-    return [ast.parse(p.read_text(encoding="utf-8")) for p in sorted(SCORING_PACKAGE.glob("*.py"))]
+    return [ast.parse(p.read_text(encoding="utf-8")) for p in sorted(SCORING_PACKAGE.rglob("*.py"))]
 
 
 def _imported_modules(tree: ast.AST) -> set[str]:

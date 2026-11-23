@@ -23,15 +23,12 @@ from app.scoring._common import (
     weighted,
 )
 
-_LIVING_ROOM = {"confirmed": 10.0, "likely": 7.0, "unknown": 5.0}
 _LIVING_ROOM_NL = {
     "confirmed": "woonkamer bevestigd",
     "likely": "woonkamer waarschijnlijk",
     "unknown": "woonkamer onbekend",
     "absent": "geen woonkamer",
 }
-_RATING_GOOD = 9.0
-_RATING_POOR = 7.0
 
 
 def score_quality(
@@ -53,7 +50,7 @@ def score_quality(
     flight = (timing + duration + access) / 3
 
     weather_score, weather_text = _weather(weather, params)
-    stay_score, stay_text = _stay(stay, trip)
+    stay_score, stay_text = _stay(stay, trip, params)
     value = weighted(
         [
             (params.quality_flight, flight),
@@ -119,10 +116,15 @@ def _hours(moment: time) -> float:
 def _weather(weather: WeatherClimate | None, params: ScoringParams) -> tuple[float, str]:
     if weather is None:
         return MISSING_SCORE, "weer geen data"
-    score = (
-        0.4 * lin(weather.tmax_c, params.tmax_worst_c, params.tmax_best_c)
-        + 0.3 * lin(weather.sunshine_hours, 0, params.sunshine_best_hours)
-        + 0.3 * lin(weather.rain_day_fraction, params.rain_fraction_worst, 0)
+    score = weighted(
+        [
+            (
+                params.weather_temperature,
+                lin(weather.tmax_c, params.tmax_worst_c, params.tmax_best_c),
+            ),
+            (params.weather_sunshine, lin(weather.sunshine_hours, 0, params.sunshine_best_hours)),
+            (params.weather_rain, lin(weather.rain_day_fraction, params.rain_fraction_worst, 0)),
+        ]
     )
     text = (
         f"weer {nl_number(score)} ({nl_number(weather.tmax_c, 0)} °C, "
@@ -132,19 +134,26 @@ def _weather(weather: WeatherClimate | None, params: ScoringParams) -> tuple[flo
     return score, text
 
 
-def _stay(stay: Stay | None, trip: TripConfig) -> tuple[float, str]:
+def _stay(stay: Stay | None, trip: TripConfig, params: ScoringParams) -> tuple[float, str]:
     if stay is None:
         return MISSING_SCORE, "verblijf geen data"
     if stay.bedrooms < trip.required_bedrooms or stay.guests < trip.required_guests:
         return 0.0, "verblijf 0,0 (te klein voor de groep)"
-    if stay.living_room == "absent":
-        score = 0.0 if trip.stay.living_room_required else _LIVING_ROOM["unknown"]
-    else:
-        score = _LIVING_ROOM[stay.living_room]
+    score = _living_room_score(stay, trip, params)
     if stay.rating is not None and score > 0:
-        if stay.rating >= _RATING_GOOD:
-            score += 1
-        elif stay.rating < _RATING_POOR:
-            score -= 1
+        if stay.rating >= params.rating_good:
+            score += params.rating_bonus
+        elif stay.rating < params.rating_poor:
+            score -= params.rating_bonus
     score = clamp(score)
     return score, f"verblijf {nl_number(score)} ({_LIVING_ROOM_NL[stay.living_room]})"
+
+
+def _living_room_score(stay: Stay, trip: TripConfig, params: ScoringParams) -> float:
+    if stay.living_room == "confirmed":
+        return params.stay_confirmed_score
+    if stay.living_room == "likely":
+        return params.stay_likely_score
+    if stay.living_room == "absent" and trip.stay.living_room_required:
+        return 0.0
+    return params.stay_unknown_score

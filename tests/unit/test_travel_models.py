@@ -1,60 +1,21 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from app.domain import (
-    Confidence,
-    DimensionScore,
-    FlightLeg,
-    Itinerary,
-    ScoringParams,
-    Stay,
-)
-
-CET = timezone(timedelta(hours=1))
-
-
-def leg(**overrides: Any) -> FlightLeg:
-    data: dict[str, Any] = {
-        "origin_iata": "EIN",
-        "destination_iata": "OPO",
-        "departure": datetime(2027, 3, 19, 15, 0, tzinfo=CET),
-        "arrival": datetime(2027, 3, 19, 16, 40, tzinfo=UTC),
-        "carrier": "Transavia",
-        "flight_number": "HV6123",
-        "price_per_person_eur": Decimal("89.00"),
-        "source": "serpapi",
-        "confidence": Confidence.LIVE,
-    }
-    data.update(overrides)
-    return FlightLeg.model_validate(data)
-
-
-def itinerary(**overrides: Any) -> Itinerary:
-    data: dict[str, Any] = {
-        "city_code": "OPO",
-        "outbound": leg(),
-        "inbound": leg(
-            origin_iata="OPO",
-            destination_iata="EIN",
-            departure=datetime(2027, 3, 22, 17, 0, tzinfo=UTC),
-            arrival=datetime(2027, 3, 22, 20, 30, tzinfo=CET),
-            flight_number="HV6124",
-            price_per_person_eur=Decimal("99.00"),
-        ),
-        "outbound_access_minutes": 60,
-        "inbound_access_minutes": 60,
-        "ground_cost_eur": Decimal("280.00"),
-    }
-    data.update(overrides)
-    return Itinerary.model_validate(data)
+from app.domain import Confidence, DimensionScore, ScoringParams, Stay
+from tests.unit.scoring_fixtures import CET, itinerary, leg
 
 
 def test_flight_duration_respects_time_zones() -> None:
-    assert leg().duration_minutes == 160
+    # 15:00 in CET is 14:00 UTC, so landing at 16:40 UTC is a 160-minute flight.
+    flight = leg(
+        departure=datetime(2027, 3, 19, 15, 0, tzinfo=CET),
+        arrival=datetime(2027, 3, 19, 16, 40, tzinfo=UTC),
+    )
+
+    assert flight.duration_minutes == 160
 
 
 def test_flight_times_must_include_a_time_zone() -> None:

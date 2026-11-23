@@ -12,7 +12,7 @@ from app.domain.scores import ScoringParams
 class _Model(BaseModel):
     # Frozen: a validated config is never mutated; overrides produce a new, re-validated one.
     # extra="forbid": a typo in a trip file must fail loudly instead of being ignored.
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
 
 class GeoPoint(_Model):
@@ -119,5 +119,12 @@ class TripConfig(_Model):
             raise ValueError(msg)
         if self.required_guests < self.group_size:
             msg = "stay.guests_min must be at least group_size"
+            raise ValueError(msg)
+        return self._consistent_with_scoring()
+
+    def _consistent_with_scoring(self) -> Self:
+        # Otherwise the access-time scale runs backwards and longer drives score higher.
+        if self.max_drive_minutes <= self.scoring.access_minutes_best:
+            msg = "max_drive_minutes must be above scoring.access_minutes_best"
             raise ValueError(msg)
         return self

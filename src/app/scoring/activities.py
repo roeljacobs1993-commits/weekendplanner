@@ -3,7 +3,7 @@
 import math
 
 from app.domain import ActivityCounts, DimensionScore, ScoringParams
-from app.scoring._common import clamp, confidence_nl, missing, nl_number
+from app.scoring._common import clamp, confidence_nl, missing, nl_number, weighted
 
 CATEGORY_NL = {
     "museums": "musea",
@@ -37,7 +37,9 @@ def score_activities(counts: ActivityCounts | None, params: ScoringParams) -> Di
         if (counts.wikivoyage_items or 0) >= params.wikivoyage_bonus_threshold
         else 0.0
     )
-    value = clamp(0.6 * amount + 0.4 * variety + bonus)
+    value = clamp(
+        weighted([(params.activity_amount, amount), (params.activity_variety, variety)]) + bonus
+    )
     return DimensionScore(
         value=value,
         confidence=counts.confidence,
@@ -50,7 +52,7 @@ def _explain(
     value: float, counts: ActivityCounts, rich: list[str], bonus: float, categories: int
 ) -> str:
     top = sorted(counts.counts.items(), key=lambda item: (-item[1], item[0]))[:2]
-    top_text = ", ".join(f"{CATEGORY_NL.get(name, name)} {count}" for name, count in top if count)
+    top_text = ", ".join(f"{CATEGORY_NL[name]} {count}" for name, count in top if count)
     parts = [f"{len(rich)} van {categories} categorieën met ruim aanbod"]
     if top_text:
         parts[0] += f" (meeste: {top_text})"

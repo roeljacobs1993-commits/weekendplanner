@@ -11,11 +11,10 @@ from app.scoring._common import (
     lin,
     missing,
     nl_number,
+    weighted,
 )
 
 _DAYS_PER_YEAR = 365.25
-_RECENT_YEARS = 2
-_MIDDLE_YEARS = 5
 
 
 def score_originality(
@@ -38,16 +37,17 @@ def score_originality(
         poi = inputs.tourism_poi_per_km2
         density = lin(poi, params.poi_density_crowded, params.poi_density_quiet)
         density_text = f"drukte {nl_number(density)} ({nl_number(poi, 0)} POI/km²)"
-    base = 0.6 * fame + 0.4 * density
+    base = weighted([(params.originality_fame, fame), (params.originality_density, density)])
+    # A visit date in the future is a typo in the history, not a reason to penalise.
+    visits = sorted(visit for visit in inputs.previous_visits if visit <= today)
     penalty = min(
-        params.visit_penalty_max,
-        sum(_visit_penalty(visit, today, params) for visit in inputs.previous_visits),
+        params.visit_penalty_max, sum(_visit_penalty(visit, today, params) for visit in visits)
     )
     value = max(0.0, base - penalty)
     confidence = confidence_of(confidences)
     parts = [f"{fame_text}, {density_text}"]
-    if inputs.previous_visits:
-        years = ", ".join(str(visit.year) for visit in sorted(inputs.previous_visits))
+    if visits:
+        years = ", ".join(str(visit.year) for visit in visits)
         parts.append(f"eerder bezocht in {years} (-{nl_number(penalty)})")
     return DimensionScore(
         value=value,
@@ -61,8 +61,8 @@ def score_originality(
 
 def _visit_penalty(visited: date, today: date, params: ScoringParams) -> float:
     years_ago = (today - visited).days / _DAYS_PER_YEAR
-    if years_ago < _RECENT_YEARS:
+    if years_ago < params.visit_recent_years:
         return params.visit_penalty_recent
-    if years_ago < _MIDDLE_YEARS:
+    if years_ago < params.visit_middle_years:
         return params.visit_penalty_middle
     return params.visit_penalty_old
