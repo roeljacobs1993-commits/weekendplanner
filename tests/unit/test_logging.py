@@ -83,9 +83,10 @@ def test_a_pair_of_urls_is_scrubbed_on_both_sides() -> None:
 
 
 def test_text_in_the_name_slot_of_a_pair_is_scrubbed() -> None:
-    result = redact_secrets(None, "info", {"event": "call", "auth": ("Bearer abc", 1)})
+    # A neutral field name, so only the pair handling can redact the first element.
+    result = redact_secrets(None, "info", {"event": "call", "pair": ("token=abc123", 1)})
 
-    assert result["auth"] == REDACTED
+    assert result["pair"] == (f"token={REDACTED}", 1)
 
 
 def test_secrets_in_mapping_keys_are_scrubbed() -> None:
@@ -139,6 +140,23 @@ def test_authorization_header_text_is_redacted() -> None:
         ('{"client_secret": "abc123"}', f'{{"client_secret": "{REDACTED}"}}'),
         ('{"refresh_token": "abc123"}', f'{{"refresh_token": "{REDACTED}"}}'),
         ("passwd=abc123&x=1", f"passwd={REDACTED}&x=1"),
+        # An ordinary assignment in front must not swallow the secret behind it.
+        ("error: api_key=abc123", f"error: api_key={REDACTED}"),
+        (
+            "url=https://serpapi.com/search?api_key=abc123&q=AMS",
+            f"url=https://serpapi.com/search?api_key={REDACTED}&q=AMS",
+        ),
+        (
+            "input_value='https://serpapi.com/search?api_key=abc123'",
+            f"input_value='https://serpapi.com/search?api_key={REDACTED}'",
+        ),
+        # Quoted values with spaces or separators.
+        ('{"password": "correct horse"}', f'{{"password": "{REDACTED}"}}'),
+        ("{'Authorization': 'Token abc123'}", f"{{'Authorization': '{REDACTED}'}}"),
+        ('{"Cookie": "a=1; sid=xyz"}', f'{{"Cookie": "{REDACTED}"}}'),
+        # Names starting with dashes or an underscore.
+        ("--api-key=abc123", f"--api-key={REDACTED}"),
+        ("_token=abc123", f"_token={REDACTED}"),
     ],
 )
 def test_secret_assignments_in_text_are_redacted(text: str, expected: str) -> None:
@@ -160,6 +178,22 @@ def test_tuple_keys_become_text_so_json_rendering_works() -> None:
     result = redact_secrets(None, "info", {"event": "call", "by_pair": {("AMS", "OPO"): 1}})
 
     assert result["by_pair"] == {"('AMS', 'OPO')": 1}
+
+
+def test_fare_names_that_look_like_auth_schemes_are_kept() -> None:
+    result = redact_secrets(
+        None, "info", {"event": "fare", "note": "Basic Economy, Digest included"}
+    )
+
+    assert result["note"] == "Basic Economy, Digest included"
+
+
+def test_long_chains_of_assignments_are_handled() -> None:
+    text = "a=" * 5000 + "api_key=abc123"
+
+    result = redact_secrets(None, "info", {"event": "call", "note": text})
+
+    assert result["note"].endswith(f"api_key={REDACTED}")
 
 
 def test_bearer_tokens_in_text_are_redacted() -> None:

@@ -72,17 +72,20 @@ _FIXED_SCRUBBERS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"(?im)\b((?:proxy-)?authorization|set-cookie|cookie)(\s*[:=]\s*)[^\r\n]+"),
         rf"\1\2{REDACTED}",
     ),
-    # Credentials after an auth scheme, e.g. "Bearer abc.def".
-    (re.compile(r"(?i)\b(bearer|basic|digest)\s+[A-Za-z0-9+/=._~-]{6,}"), rf"\1 {REDACTED}"),
+    # A bearer token in free text, e.g. "sent Bearer abc.def". Basic/Digest are only redacted
+    # in header context (above): on their own they are ordinary words ("Basic Economy").
+    (re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9+/=._~-]{6,}"), rf"\1 {REDACTED}"),
     # https://user:password@host
     (re.compile(r"(?<=//)[^/@\s]+@"), f"{REDACTED}@"),
 )
 # name=value, name: value, "name": "value", name='value': the value is replaced when the
 # name is a secret name by the same rules as field names. "(?!//)" skips URL schemes such
-# as "https://", so the query string inside the URL is still scanned.
+# as "https://", so the query string inside the URL is still scanned. Lengths are bounded so
+# the scan stays linear on long or hostile input.
 _ASSIGNMENT = re.compile(
-    r"(?<![\w-])(?P<q>[\"']?)(?P<name>[A-Za-z][\w-]*)(?P=q)(?P<sep>\s*[:=]\s*)(?!//)"
-    r"(?P<vq>[\"']?)(?P<value>[^&\s#\"',;})\]]+)(?P=vq)"
+    r"(?<![A-Za-z0-9])(?P<q>[\"']?)(?P<name>[A-Za-z_][\w-]{0,63})(?P=q)"
+    r"(?P<sep>\s*[:=]\s*)(?!//)"
+    r"(?P<value>\"[^\"\r\n]{0,512}\"|'[^'\r\n]{0,512}'|[^&\s#\"',;})\]]{1,512})"
 )
 
 
@@ -96,12 +99,26 @@ def is_secret_name(name: str) -> bool:
     )
 
 
-def _scrub_assignment(match: re.Match[str]) -> str:
-    if not is_secret_name(match["name"]) or match["value"] == REDACTED:
-        return match[0]
-    return (
-        f"{match['q']}{match['name']}{match['q']}{match['sep']}{match['vq']}{REDACTED}{match['vq']}"
-    )
+def _scrub_assignments(text: str) -> str:
+    """Redact the values of secret assignments.
+
+    After a harmless assignment the scan continues inside its value, so a secret that the
+    value contains (``url=https://h/?api_key=x``, ``error: api_key=x``) is still found.
+    """
+    parts: list[str] = []
+    position = 0
+    while match := _ASSIGNMENT.search(text, position):
+        value_start = match.start("value")
+        parts.append(text[position:value_start])
+        if is_secret_name(match["name"]):
+            value = match["value"]
+            quote = value[0] if value[0] in "\"'" else ""
+            parts.append(f"{quote}{REDACTED}{quote}")
+            position = match.end("value")
+        else:
+            position = value_start
+    parts.append(text[position:])
+    return "".join(parts)
 
 
 class SecretRedactor:
@@ -162,7 +179,7 @@ class SecretRedactor:
             text = text.replace(secret, REDACTED)
         for pattern, replacement in _FIXED_SCRUBBERS:
             text = pattern.sub(replacement, text)
-        return _ASSIGNMENT.sub(_scrub_assignment, text)
+        return _scrub_assignments(text)
 
 
 redact_secrets = SecretRedactor()
