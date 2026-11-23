@@ -214,6 +214,18 @@ Alle constanten staan in één `ScoringParams`-model met defaults; overschrijfba
 
 Ontbrekende invoer: score 5,0, betrouwbaarheid *geschat*, uitleg "geen data: …". **Sortering**: totaal aflopend, dan prijs aflopend, dan `city_code` oplopend, zodat dezelfde snapshot en gewichten altijd dezelfde ranking geven. Afronding alleen bij weergave (1 decimaal).
 
+Uitwerkingen die de formules niet vastleggen (T-003):
+- **Vertrektijden in lokale tijd:** vertrekgemak gebruikt de kloktijd in de tijdzone die in de data staat. Bronadapters moeten vluchttijden dus leveren met de lokale offset van de luchthaven.
+- **Half-open venster:** het ideaal ligt `open_window_ideal_offset_hours` (standaard 3) na de begintijd of vóór de eindtijd. Bij "na 15:00" is het ideaal dus 18:00. Een venster zonder grenzen geeft altijd 10.
+- **Verblijf:**
+  - te weinig slaapkamers of gasten voor de groep geeft 0;
+  - woonkamer `confirmed` geeft 10, `likely` 7 en `unknown` 5;
+  - woonkamer `absent` geeft 0 als een woonkamer vereist is, anders 5;
+  - een beoordeling van 9 of hoger geeft +1, lager dan 7 geeft −1.
+- **Prijs zonder verblijf:** geschat op 5,0 met de vlag `no_stay`. Een budget kleiner dan of gelijk aan `price_low_eur` wordt opgehoogd tot net daarboven.
+- **Vlaggen:** `open_jaw`, `group_booking`, `no_stay`, `over_budget`.
+- **Parameters per trip:** alle constanten staan in `ScoringParams` en zijn per trip te overschrijven onder `scoring:` in de trip-YAML. Een onbekende sleutel geeft een fout.
+
 ## 7. Quota en snapshots
 - **Limieten** in `Settings` met defaults: `SERPAPI_MONTHLY_LIMIT=250` (gedeeld door flights en hotels, periode = kalendermaand UTC), Travelpayouts/ORS/NS als dag- of minuutlimiet volgens hun voorwaarden, onofficieel max. 30 per run.
 - **Vóór elk netwerkverzoek**: cache-hit binnen TTL → geen verzoek. Anders atomair `used + 1` als `used < limit`, anders `QuotaExceededError` (harde stop voor die bron). Bij ≥ 80% één `quota_warning`-log en een melding in rapport/UI.
