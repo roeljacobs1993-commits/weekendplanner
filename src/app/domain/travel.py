@@ -1,5 +1,6 @@
 """Flights, itineraries and stays: what a destination offers the group."""
 
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal, Self
@@ -21,11 +22,21 @@ ActivityCategory = Literal[
 ActivityCount = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
+# A plain host name with an optional port: no credentials, spaces or markup.
+_HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(?::[0-9]{1,5})?$")
+# Characters that could break out of an HTML attribute or Markdown link if a renderer
+# ever forgets to escape; real URLs percent-encode them.
+_UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f<>\"'`\\]")
+
+
 def _web_url(value: str) -> str:
     # Links end up in the report and web UI; javascript: or data: links would run there.
+    if _UNSAFE_URL_CHARS.search(value):
+        msg = "must be an http(s) address without spaces, quotes or markup"
+        raise ValueError(msg)
     parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        msg = "must be an http(s) address"
+    if parsed.scheme not in {"http", "https"} or not _HOST.match(parsed.netloc):
+        msg = "must be an http(s) address with a plain host name"
         raise ValueError(msg)
     return value
 

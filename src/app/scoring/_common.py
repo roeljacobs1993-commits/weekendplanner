@@ -1,5 +1,6 @@
 """Small pure helpers shared by the scoring functions: scales and Dutch formatting."""
 
+import math
 from collections.abc import Iterable
 from decimal import Decimal
 
@@ -22,6 +23,10 @@ def lin(x: float, a: float, b: float) -> float:
 
 
 def clamp(value: float, low: float = 0.0, high: float = 10.0) -> float:
+    # min()/max() would turn NaN into the best score; a NaN here is always a bug upstream.
+    if math.isnan(value):
+        msg = "score is NaN"
+        raise ValueError(msg)
     return max(low, min(high, value))
 
 

@@ -210,6 +210,7 @@ def test_invalid_saturation_is_rejected(saturation: dict[str, int]) -> None:
         ("poi_density_quiet", "poi_density_crowded", "poi_density_quiet must be below"),
         ("pageviews_log10_unknown", "pageviews_log10_famous", "pageviews_log10_unknown must be"),
         ("rating_poor", "rating_good", "rating_poor must be below"),
+        ("visit_recent_years", "visit_middle_years", "visit_recent_years must be below"),
     ],
 )
 def test_inverted_ranges_are_rejected(low: str, high: str, message: str) -> None:
@@ -236,3 +237,90 @@ def test_weather_weights_are_tunable() -> None:
 def test_drive_limit_must_exceed_the_ideal_access_time() -> None:
     with pytest.raises(ValidationError, match="max_drive_minutes must be above"):
         trip(max_drive_minutes=40)
+
+
+@pytest.mark.parametrize(
+    ("weights", "group"),
+    [
+        ({"weather_temperature": 0, "weather_sunshine": 0, "weather_rain": 0}, "weather"),
+        ({"activity_amount": 0, "activity_variety": 0}, "activity"),
+        ({"originality_fame": 0, "originality_density": 0}, "originality"),
+    ],
+)
+def test_each_weight_group_needs_a_positive_weight(weights: dict[str, float], group: str) -> None:
+    with pytest.raises(ValidationError, match=f"at least one {group} weight must be positive"):
+        ScoringParams.model_validate(weights)
+
+
+def test_activity_weights_are_tunable() -> None:
+    params = ScoringParams(activity_amount=1, activity_variety=0, wikivoyage_bonus=0)
+
+    result = score_activities(activities(counts={"food": 150}), params)
+
+    # Only the amount counts: food at saturation, 7 empty categories -> 10 / 8.
+    assert result.value == pytest.approx(1.25)
+
+
+def test_originality_weights_are_tunable() -> None:
+    params = ScoringParams(originality_fame=1, originality_density=0)
+
+    result = score_originality(originality(tourism_poi_per_km2=80), TODAY, params)
+
+    # Density would be 0 but no longer counts; fame for 100k views is 5.
+    assert result.value == pytest.approx(5.0)
+
+
+def test_rating_bonus_is_tunable() -> None:
+    params = ScoringParams(rating_bonus=2)
+
+    result = score_quality(itinerary(), stay(rating=9.5), weather(), trip(), params)
+
+    assert result.inputs["stay"] == 9.0
+
+
+def test_rating_thresholds_are_tunable() -> None:
+    params = ScoringParams(rating_poor=8)
+
+    result = score_quality(itinerary(), stay(rating=7.5), weather(), trip(), params)
+
+    assert result.inputs["stay"] == 6.0
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https:evil.example",
+        "//host.example/x",
+        " javascript:alert(1)",
+        "java\tscript:alert(1)",
+        "https://x.nl) [Boek hier](javascript:alert(1)",
+        'https://x.nl/"><script>',
+        "https://user:pw@x.nl/",
+    ],
+)
+def test_malformed_or_injecting_links_are_rejected(url: str) -> None:
+    with pytest.raises(ValidationError):
+        stay(url=url)
+
+
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "1E+400"])
+def test_non_finite_or_huge_euro_amounts_are_rejected(amount: str) -> None:
+    with pytest.raises(ValidationError):
+        stay(price_total_eur=Decimal(amount))
+
+
+def test_huge_weight_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 100"):
+        Weights(price=1e308)
+
+
+def test_huge_budget_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="budget_per_person_eur"):
+        trip(budget_per_person_eur=Decimal("1E+400"))
+
+
+def test_clamp_refuses_nan_instead_of_returning_the_best_score() -> None:
+    from app.scoring._common import clamp
+
+    with pytest.raises(ValueError, match="NaN"):
+        clamp(float("nan"))

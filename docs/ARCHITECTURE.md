@@ -231,7 +231,8 @@ Uitwerkingen die de formules niet vastleggen (T-003):
   - Ze zijn per trip te overschrijven onder `scoring:` in de trip-YAML. Een onbekende sleutel geeft een fout.
   - Bereiken worden gecontroleerd: de onder- en bovengrens mogen niet omgekeerd staan, en `max_drive_minutes` moet boven `access_minutes_best` liggen.
   - Een gedeeltelijke `activity_saturation` wordt samengevoegd met de standaardwaarden.
-- **Onbetrouwbare invoer:** de domeinmodellen weigeren NaN en oneindig. Ze begrenzen getallen en tekstlengtes, staan alleen bekende activiteitscategorieën toe en accepteren voor links alleen `http(s)`-adressen, zodat het rapport geen `javascript:`-link kan tonen.
+  - Gewichten binnen een groep (kwaliteit, weer, activiteiten, originaliteit) worden genormaliseerd naar een som van 1. Een override van 0,6/0,6 betekent dus 50/50.
+- **Onbetrouwbare invoer:** de domeinmodellen weigeren NaN en oneindig. Ze begrenzen getallen en tekstlengtes, staan alleen bekende activiteitscategorieën toe en accepteren voor links alleen `http(s)`-adressen met een gewone hostnaam, zonder spaties, aanhalingstekens of opmaaktekens, zodat het rapport geen `javascript:`-link kan tonen. Dat is een tweede verdedigingslinie: het rapport en de web-UI escapen URL's en tekst altijd (Jinja-autoescape, nooit `|safe` op brondata). `clamp` weigert NaN, zodat een fout nooit stil de beste score oplevert.
 
 ## 7. Quota en snapshots
 - **Limieten** in `Settings` met defaults: `SERPAPI_MONTHLY_LIMIT=250` (gedeeld door flights en hotels, periode = kalendermaand UTC), Travelpayouts/ORS/NS als dag- of minuutlimiet volgens hun voorwaarden, onofficieel max. 30 per run.

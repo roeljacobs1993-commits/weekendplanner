@@ -16,7 +16,7 @@ class _Model(BaseModel):
 
 
 class GeoPoint(_Model):
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=200)
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
 
@@ -47,10 +47,10 @@ class TimeWindow(_Model):
 
 
 class Weights(_Model):
-    price: float = Field(default=0.35, ge=0)
-    quality: float = Field(default=0.30, ge=0)
-    activities: float = Field(default=0.20, ge=0)
-    originality: float = Field(default=0.15, ge=0)
+    price: float = Field(default=0.35, ge=0, le=100)
+    quality: float = Field(default=0.30, ge=0, le=100)
+    activities: float = Field(default=0.20, ge=0, le=100)
+    originality: float = Field(default=0.15, ge=0, le=100)
 
     @model_validator(mode="after")
     def _not_all_zero(self) -> Self:
@@ -70,7 +70,7 @@ class StayRequirements(_Model):
 
 
 class TripConfig(_Model):
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=200)
     home: GeoPoint
     group_size: int = Field(ge=1)
     rooms_min: int = Field(ge=1)
@@ -82,7 +82,7 @@ class TripConfig(_Model):
     max_ov_minutes: int = Field(default=180, gt=0)
     top_n: Literal[3, 5, 10] = 5
     top_k_live: int = Field(default=12, ge=1)
-    budget_per_person_eur: Decimal | None = Field(default=None, gt=0)
+    budget_per_person_eur: Decimal | None = Field(default=None, gt=0, le=1_000_000)
     weights: Weights = Weights()
     stay: StayRequirements = StayRequirements()
     scoring: ScoringParams = ScoringParams()
