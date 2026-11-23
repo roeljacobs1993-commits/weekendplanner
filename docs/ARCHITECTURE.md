@@ -222,9 +222,16 @@ Uitwerkingen die de formules niet vastleggen (T-003):
   - woonkamer `confirmed` geeft 10, `likely` 7 en `unknown` 5;
   - woonkamer `absent` geeft 0 als een woonkamer vereist is, anders 5;
   - een beoordeling van 9 of hoger geeft +1, lager dan 7 geeft −1.
+  - **Beoordelingen staan altijd op een schaal van 0 tot 10.** Bronnen met een schaal van 0 tot 5 (Airbnb, Google) worden door de adapter verdubbeld.
 - **Prijs zonder verblijf:** geschat op 5,0 met de vlag `no_stay`. Een budget kleiner dan of gelijk aan `price_low_eur` wordt opgehoogd tot net daarboven.
+- **Historie:** een bezoekdatum in de toekomst (een tikfout) telt niet mee.
 - **Vlaggen:** `open_jaw`, `group_booking`, `no_stay`, `over_budget`.
-- **Parameters per trip:** alle constanten staan in `ScoringParams` en zijn per trip te overschrijven onder `scoring:` in de trip-YAML. Een onbekende sleutel geeft een fout.
+- **Ranking:** twee invoeren voor dezelfde stad worden geweigerd, omdat de volgorde dan van de invoer zou afhangen. Het reisplan en het verblijf moeten bij de stad van de bestemming horen.
+- **Parameters per trip:** alle constanten van de formules staan in `ScoringParams`, ook de interne gewichten (weer 0,4/0,3/0,3, activiteiten 0,6/0,4, originaliteit 0,6/0,4), de woonkamerscores, de beoordelingsdrempels en de jaargrenzen van de historie.
+  - Ze zijn per trip te overschrijven onder `scoring:` in de trip-YAML. Een onbekende sleutel geeft een fout.
+  - Bereiken worden gecontroleerd: de onder- en bovengrens mogen niet omgekeerd staan, en `max_drive_minutes` moet boven `access_minutes_best` liggen.
+  - Een gedeeltelijke `activity_saturation` wordt samengevoegd met de standaardwaarden.
+- **Onbetrouwbare invoer:** de domeinmodellen weigeren NaN en oneindig. Ze begrenzen getallen en tekstlengtes, staan alleen bekende activiteitscategorieën toe en accepteren voor links alleen `http(s)`-adressen, zodat het rapport geen `javascript:`-link kan tonen.
 
 ## 7. Quota en snapshots
 - **Limieten** in `Settings` met defaults: `SERPAPI_MONTHLY_LIMIT=250` (gedeeld door flights en hotels, periode = kalendermaand UTC), Travelpayouts/ORS/NS als dag- of minuutlimiet volgens hun voorwaarden, onofficieel max. 30 per run.
