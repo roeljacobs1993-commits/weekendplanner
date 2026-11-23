@@ -80,13 +80,14 @@ _FIXED_SCRUBBERS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 # name=value, name: value, "name": "value", name='value': the value is replaced when the
 # name is a secret name by the same rules as field names. "(?!//)" skips URL schemes such
-# as "https://", so the query string inside the URL is still scanned. Lengths are bounded so
-# the scan stays linear on long or hostile input.
+# as "https://", so the query string inside the URL is still scanned. Only the name and the
+# separator are matched here; the value is read (without a length limit) only when the name
+# is a secret, so long tokens are redacted completely and harmless text is scanned once.
 _ASSIGNMENT = re.compile(
-    r"(?<![A-Za-z0-9])(?P<q>[\"']?)(?P<name>[A-Za-z_][\w-]{0,63})(?P=q)"
-    r"(?P<sep>\s*[:=]\s*)(?!//)"
-    r"(?P<value>\"[^\"\r\n]{0,512}\"|'[^'\r\n]{0,512}'|[^&\s#\"',;})\]]{1,512})"
+    r"(?<![A-Za-z0-9])(?P<q>[\"']?)(?P<name>[A-Za-z_][\w-]{0,255})(?P=q)[ \t]*[:=][ \t]*(?!//)"
 )
+# A quoted value may be unterminated (cut-off text); it is then redacted to the end of line.
+_VALUE = re.compile(r"\"[^\"\r\n]*\"?|'[^'\r\n]*'?|[^&\s#\"',;})\]]+")
 
 
 def is_secret_name(name: str) -> bool:
@@ -102,21 +103,22 @@ def is_secret_name(name: str) -> bool:
 def _scrub_assignments(text: str) -> str:
     """Redact the values of secret assignments.
 
-    After a harmless assignment the scan continues inside its value, so a secret that the
-    value contains (``url=https://h/?api_key=x``, ``error: api_key=x``) is still found.
+    After a harmless assignment the scan continues right after its separator, so a secret
+    inside its value (``url=https://h/?api_key=x``, ``error: api_key=x``) is still found.
     """
     parts: list[str] = []
     position = 0
     while match := _ASSIGNMENT.search(text, position):
-        value_start = match.start("value")
+        value_start = match.end()
         parts.append(text[position:value_start])
-        if is_secret_name(match["name"]):
-            value = match["value"]
-            quote = value[0] if value[0] in "\"'" else ""
-            parts.append(f"{quote}{REDACTED}{quote}")
-            position = match.end("value")
-        else:
-            position = value_start
+        position = value_start
+        value = _VALUE.match(text, value_start) if is_secret_name(match["name"]) else None
+        if value is not None:
+            raw = value[0]
+            opening = raw[0] if raw[0] in "\"'" else ""
+            closing = opening if len(raw) > 1 and raw.endswith(opening) and opening else ""
+            parts.append(f"{opening}{REDACTED}{closing}")
+            position = value.end()
     parts.append(text[position:])
     return "".join(parts)
 

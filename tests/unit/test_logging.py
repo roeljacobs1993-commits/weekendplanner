@@ -188,6 +188,30 @@ def test_fare_names_that_look_like_auth_schemes_are_kept() -> None:
     assert result["note"] == "Basic Economy, Digest included"
 
 
+def test_long_quoted_secret_values_are_fully_redacted() -> None:
+    token = "x" * 600
+
+    result = redact_secrets(None, "info", {"event": "call", "note": f'{{"token": "{token}"}}'})
+
+    assert result["note"] == f'{{"token": "{REDACTED}"}}'
+
+
+def test_long_unquoted_secret_values_are_fully_redacted() -> None:
+    token = "y" * 1200
+
+    result = redact_secrets(None, "info", {"event": "call", "note": f"token={token}&q=AMS"})
+
+    assert result["note"] == f"token={REDACTED}&q=AMS"
+
+
+def test_long_camel_case_secret_names_are_recognised() -> None:
+    name = "a" * 70 + "ApiKey"
+
+    result = redact_secrets(None, "info", {"event": "call", "note": f"{name}=abc123"})
+
+    assert result["note"] == f"{name}={REDACTED}"
+
+
 def test_long_chains_of_assignments_are_handled() -> None:
     text = "a=" * 5000 + "api_key=abc123"
 
